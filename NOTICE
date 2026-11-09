@@ -1,0 +1,16 @@
+AppleIIslop — Copyright 2026 The AppleIIslop contributors.
+
+Reuses and adapts Beebslop, Copyright 2026 The Beebslop contributors,
+and code inherited from Elkslop, Copyright 2026 The Elkslop contributors,
+under the BSD 3-Clause License (LICENSE).
+
+The CPU and disassembler are reused from Beebslop/Elkslop. Desktop audio,
+frame publication, menus, media persistence, icon encoders, CLI and packaging
+are adapted from those projects. Speaker resampling and the queued typist
+also follow their implementations.
+
+Independent CPU fixtures keep their original licences; see
+cpu/src/jvmTest/resources/reference/README.md and LICENSES/.
+
+Apple ROMs and disk operating systems are third-party binary inputs, outside
+the BSD licence. Their presence does not grant redistribution rights.

@@ -1,0 +1,26 @@
+.gradle/
+.kotlin/
+.tools/
+.claude/
+**/build/
+.idea/
+*.iml
+.DS_Store
+# Track only the ROMs the emulator needs; other images (backups,
+# alternative dumps) stay local.
+roms/*
+!roms/apple2plus.rom
+!roms/video.rom
+!roms/disk2.rom
+
+!roms/README.md
+
+# Track only the bundled disks and their documentation; other images stay local.
+disks/*
+!disks/README.md
+!disks/dos33-master.dsk
+!disks/prodos-2.4.3.po
+
+# Track only shared tape files explicitly listed here; recordings stay local.
+tapes/*
+!tapes/README.md
