@@ -1,10 +1,10 @@
 # AppleIIslop
 
-An Apple II Plus emulator using Beebslop's Kotlin Multiplatform architecture and
-Swing desktop layout. The 6502 CPU, disassembler and their tests are reused;
-the desktop frame publication, audio output, menus, disk persistence, icon
-encoders and packaging are adapted from Beebslop. Apple II hardware lives in a
-separate platform-independent module.
+An Apple II Plus emulator written in Kotlin Multiplatform, with a Swing desktop
+interface. The 6502 CPU and Apple II hardware run in platform-independent
+modules, separate from the desktop display, audio and file handling.
+
+![The Oregon Trail running in the AppleIIslop desktop emulator](docs/images/oregon-trail.png)
 
 ## Run
 
@@ -39,6 +39,17 @@ A new blank disk needs formatting with DOS `INIT`; it has no filesystem yet.
 Other options include `--disk2 FILE`, `--roms DIR`, `--frames N`, `--mono`,
 `--no-sound`, `--disassemble A-B`, `--origin ADDR` and `--log-keys`.
 ROMs are included in the desktop jar; `--roms` overrides them.
+
+### Example: The Oregon Trail
+
+With the game's disk images saved locally in `disks/`, boot the first disk:
+
+```sh
+./run.sh --disk disks/oregon-trail-1.dsk
+```
+
+When the game asks for the other side, choose **Disk > Drive 1 > Insert Disk...**
+and select `oregon-trail-2.dsk`. These game images are not bundled with the project.
 
 ## Cassettes
 
@@ -89,7 +100,7 @@ The input comparator polarity was checked against
 
 ## Structure
 
-- `cpu/src/commonMain`: reused NMOS 6502 and disassembler.
+- `cpu/src/commonMain`: NMOS 6502 and disassembler.
 - `apple2/src/commonMain`: 48 KiB RAM, 16 KiB Language Card, memory bus,
   keyboard latch, soft switches, speaker, video and slot-6 Disk II.
 - `desktop/src/jvmMain`: Swing UI, emulation worker, audio, file I/O and CLI.
@@ -110,26 +121,21 @@ java -jar desktop/build/libs/appleiislop.jar --no-disk
 ./gradlew :desktop:packageDmg       # macOS only
 ```
 
-Gradle is pinned to 9.7.0 and Kotlin to 2.4.21, matching Beebslop.
+Gradle is pinned to 9.7.0 and Kotlin to 2.4.21.
 Native packages include a Java runtime. JVM tests and the runnable jar have
 been verified with Gradle; native package tasks have not been exercised.
 
-An offline fallback uses dependencies already present in the local Gradle cache:
-
-```sh
-python3 tools/verify-local.py
-java -jar build/local/appleiislop.jar --no-disk
-```
-
-This compiles all JVM code, runs JUnit (including CPU reference fixtures), and
-assembles a runnable jar. It does not validate Gradle or native package tasks.
 Tests cover BASIC execution and RESET, DOS boot/save/reload, sector-order and
 nibble round trips, bundled ROMs, screenshot output and option validation.
 
 ## Credits and licensing
 
-Source code is BSD-3-Clause; see LICENSE and NOTICE. Beebslop and its predecessor
-Elkslop supply the reused code and architecture. CPU fixture licences remain in
-`cpu/src/jvmTest/resources/reference/` and `LICENSES/`.
+Source code is BSD-3-Clause; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+CPU verification uses Thomas Harte and contributors' SingleStepTests / 65x02
+vectors and Klaus Dormann's 6502 functional test. Their sources, licences and
+fixture details are recorded in the
+[test fixture documentation](cpu/src/jvmTest/resources/reference/README.md).
+
 ROM and operating-system disk images are separate third-party material, not
 covered by the source-code licence; see `roms/README.md` and `disks/README.md`.
