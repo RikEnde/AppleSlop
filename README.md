@@ -132,10 +132,8 @@ nibble round trips, bundled ROMs, screenshot output and option validation.
 
 Source code is BSD-3-Clause; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-CPU verification uses Thomas Harte and contributors' SingleStepTests / 65x02
-vectors and Klaus Dormann's 6502 functional test. Their sources, licences and
-fixture details are recorded in the
-[test fixture documentation](cpu/src/jvmTest/resources/reference/README.md).
+See [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) for the people whose hardware,
+documentation, emulator research and CPU tests this project relies on.
 
 ROM and operating-system disk images are separate third-party material, not
 covered by the source-code licence; see `roms/README.md` and `disks/README.md`.
