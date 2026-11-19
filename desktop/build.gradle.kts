@@ -11,7 +11,10 @@ kotlin {
     jvm()
 
     sourceSets {
-        jvmMain.dependencies { implementation(project(":apple2")) }
+        jvmMain.dependencies {
+            implementation(project(":apple2"))
+            implementation(project(":debugger"))
+        }
         jvmTest.dependencies { implementation(kotlin("test")) }
     }
 }

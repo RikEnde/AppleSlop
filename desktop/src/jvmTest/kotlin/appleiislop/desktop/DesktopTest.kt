@@ -6,7 +6,7 @@ import kotlin.test.*
 
 class DesktopTest {
     @Test fun bundledRomsBootAndRender() {
-        val m=runHeadless(Roms.load(null,false),Options.parse(arrayOf("--no-disk","--type","PRINT 2+2\\n")))
+        val m=runHeadless(Roms.load(null,false),Options.parse(arrayOf("--no-disk","--type","PRINT 2+2\\n"))).machine
         assertTrue(m.textLines().any { it.trim()=="4" })
         val file=Files.createTempFile("apple-frame", ".png").toFile()
         try {

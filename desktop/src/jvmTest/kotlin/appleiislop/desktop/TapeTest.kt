@@ -30,7 +30,7 @@ class TapeTest {
             TapeFile.save(TapeFile.encode(tape), file)
             // Exercises the actual CLI/headless setup, not a direct memory injection.
             val loaded = runHeadless(roms, Options.parse(arrayOf("--no-disk", "--tape", file.path,
-                "--type", "LOAD\\nRUN\\n", "--frames", "2400")))
+                "--type", "LOAD\\nRUN\\n", "--frames", "2400"))).machine
             assertTrue(loaded.textLines().any { it.trim() == "31415" }, loaded.textLines().joinToString("\n"))
             assertFalse(loaded.cpu.halted)
         } finally { file.delete() }

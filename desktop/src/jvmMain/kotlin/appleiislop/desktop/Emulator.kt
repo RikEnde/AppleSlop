@@ -10,6 +10,8 @@ import appleiislop.apple2.Disk
 import appleiislop.apple2.KeyboardText
 import appleiislop.apple2.Typist
 import appleiislop.apple2.Video
+import appleiislop.debugger.DebugSession
+import appleiislop.debugger.DebugTarget
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -33,6 +35,9 @@ class Emulator(
 
         /** Called when a changed disk couldn't be written back to [file]; it stays in, unsaved. */
         fun diskSaveFailed(drive: Int, file: File, error: IOException) {}
+
+        fun pausedChanged(paused: Boolean) {}
+        fun debuggerStopped() {}
     }
 
     /** A disk in a drive, and the file it is saved to, if any. */
@@ -46,6 +51,17 @@ class Emulator(
     private var thread: Thread? = null
     private val slots = arrayOfNulls<Slot>(2)
     private var diskMotor = false
+    private val debug = DebugSession({ machine.bus.peek(it) })
+    private var unfinished: Frame? = null
+    private var reportedPaused = false
+
+    val debugTarget: DebugTarget = debug.target(
+        post = { block -> post { block() } },
+        cpu = { machine.cpu },
+        setPaused = { paused = it },
+    )
+
+    fun setBreakpoint(address: Int, on: Boolean) = debugTarget.setBreakpoint(address, on)
 
     @Volatile private var running = false
     @Volatile var paused = false
@@ -74,7 +90,13 @@ class Emulator(
 
     fun press(code: Int) = post { it.keyboard.press(code) }
     fun releaseAll() = post { it.gameIo.buttons.fill(false) }
-    fun pressBreak() = post { typist.cancel(); it.reset(); paused = false }
+    fun pressBreak() = post {
+        typist.cancel()
+        it.reset()
+        unfinished = null
+        debug.debugger.resume()
+        paused = false
+    }
 
     /** Type [text]; characters the Apple II Plus cannot type are skipped and returned. */
     fun type(text: String, delayFrames: Int = 0): Set<Char> {
@@ -139,6 +161,8 @@ class Emulator(
     /** Switch off and on with fresh RAM and chips; disks stay inserted. */
     fun powerCycle() = post {
         typist.cancel()
+        unfinished = null
+        debug.debugger.resume()
         val tape = machine.cassette.tape
         val monochrome = machine.video.monochrome
         machine = createMachine().also { fresh ->
@@ -191,7 +215,14 @@ class Emulator(
                 machine.speaker.startSampling(SAMPLE_RATE, samples.size)
                 soundMachine = machine
             }
-            if (paused) {
+            val isPaused = paused
+            if (isPaused != reportedPaused) {
+                reportedPaused = isPaused
+                debug.pausedChanged(isPaused)
+                listener.pausedChanged(isPaused)
+            }
+            debug.tick(machine.cpu, isPaused, frameCount)
+            if (isPaused) {
                 Thread.sleep(10)
                 paceStart = System.nanoTime()
                 paceTicks = 0
@@ -201,6 +232,7 @@ class Emulator(
                 runField()
             } catch (e: Exception) {
                 paused = true
+                debug.stopped(e.message ?: e.toString())
                 listener.stopped(e)
                 continue
             }
@@ -220,11 +252,22 @@ class Emulator(
         }
     }
 
-    /** Runs one frame and publishes the picture; returns the elapsed machine ticks. */
+    /** Finishes the current frame, preserving it when the debugger stops between instructions. */
     private fun runField(): Long {
         val machine = machine
-        typist.onFrame(machine)
-        val elapsed = runFrame(machine)
+        val start = machine.clock.ticks
+        val frame = unfinished ?: Frame(start).also { typist.onFrame(machine) }
+        val cpu = machine.cpu
+        val debug = debug
+        val finished = runFrame(machine, frame, { debug.shouldStop(cpu) }, { debug.stepped(cpu) })
+        val elapsed = machine.clock.ticks - start
+        if (!finished) {
+            unfinished = frame
+            paused = true
+            listener.debuggerStopped()
+            return elapsed
+        }
+        unfinished = null
         synchronized(frameLock) { machine.video.pixels.copyInto(published) }
         tapeStatus = if (machine.cassette.tape == null) "" else
             "${machine.cassette.mode} ${machine.cassette.seconds.toInt()}s"
@@ -240,7 +283,9 @@ class Emulator(
             // Like the real machine, a jammed CPU leaves the display running and
             // only RESET recovers it. Pause so the user knows why it froze.
             paused = true
-            listener.stopped(IllegalStateException("The 6502 executed a JAM opcode and halted."))
+            val address = (machine.cpu.programCounter - 1) and 0xFFFF
+            debug.stopped("Halted by JAM at $%04X".format(address))
+            listener.stopped(IllegalStateException("The 6502 executed a JAM opcode at $%04X and halted.".format(address)))
         }
         return elapsed
     }
@@ -251,8 +296,26 @@ class Emulator(
 
         fun runFrame(machine: Apple2Machine): Long {
             val start = machine.clock.ticks
-            machine.runForTicks(Apple2Clock.TICKS_PER_FRAME.toLong())
+            runFrame(machine, Frame(start))
             return machine.clock.ticks - start
+        }
+
+        /** Returns false on a debugger stop; reuse [frame] to finish its remaining ticks. */
+        inline fun runFrame(
+            machine: Apple2Machine,
+            frame: Frame,
+            shouldStop: () -> Boolean = { false },
+            stepped: () -> Unit = {},
+        ): Boolean {
+            while (machine.clock.ticks - frame.start < Apple2Clock.TICKS_PER_FRAME) {
+                if (shouldStop()) return false
+                machine.step()
+                stepped()
+            }
+            return true
         }
     }
 }
+
+/** A frame under way, retained across debugger stops. */
+class Frame(val start: Long)

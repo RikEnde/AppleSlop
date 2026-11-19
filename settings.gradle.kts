@@ -13,4 +13,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "appleIIslop"
-include(":cpu", ":apple2", ":desktop")
+include(":cpu", ":apple2", ":debugger", ":desktop")

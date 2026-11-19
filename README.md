@@ -40,6 +40,31 @@ Other options include `--disk2 FILE`, `--roms DIR`, `--frames N`, `--mono`,
 `--no-sound`, `--disassemble A-B`, `--origin ADDR` and `--log-keys`.
 ROMs are included in the desktop jar; `--roms` overrides them.
 
+## Debugger
+
+Open **Debug > Debugger...** (Command+B on macOS, Ctrl+Shift+B elsewhere),
+or choose **Break into Debugger** to pause first. The window shows registers,
+flags, stack, disassembly, memory and breakpoints. Memory inspection respects
+the current Language Card bank without triggering hardware I/O.
+
+In the debugger, **F5** continues, **F6** pauses, **F7** steps into,
+**F8** steps over a subroutine, and **Shift+F8** steps out. **F9** toggles a
+breakpoint on the selected instruction; clicking its left edge or double-clicking
+the line does the same. Right-click an instruction to run to it.
+Closing the debugger leaves its breakpoints active.
+
+Use `--break ADDR` to set a hex breakpoint at startup; repeat it for more.
+With `--disassemble` or `--screenshot`, the headless run stops at the first
+breakpoint reached and reports the registers:
+
+```sh
+./run.sh --no-disk --break FDED
+./run.sh --no-disk --break FDED --disassemble FDED-FDF6
+```
+
+Breakpoints stop before the instruction executes. If none is reached, the
+headless run ends at its usual frame limit, including any media/typing extension.
+
 ### Example: The Oregon Trail
 
 With the game's disk images saved locally in `disks/`, boot the first disk:
@@ -100,10 +125,11 @@ The input comparator polarity was checked against
 
 ## Structure
 
-- `cpu/src/commonMain`: NMOS 6502 and disassembler.
+- `cpu/src/commonMain`: NMOS 6502, disassembler, breakpoints and stepping.
 - `apple2/src/commonMain`: 48 KiB RAM, 16 KiB Language Card, memory bus,
   keyboard latch, soft switches, speaker, video and slot-6 Disk II.
 - `desktop/src/jvmMain`: Swing UI, emulation worker, audio, file I/O and CLI.
+- `debugger/src/jvmMain`: reusable Swing debugger window and session.
 - `commonTest` / `jvmTest`: CPU vectors, real-ROM boot and disk integration tests.
 
 Core modules declare JVM, macOS, Linux and Windows Native targets. Verification
@@ -115,7 +141,7 @@ Copy-protected disk timing and analog composite-video effects are not complete.
 ## Build and verify
 
 ```sh
-./gradlew :cpu:jvmTest :apple2:jvmTest :desktop:jvmTest :desktop:fatJar
+./gradlew :cpu:jvmTest :apple2:jvmTest :debugger:jvmTest :desktop:jvmTest :desktop:fatJar
 java -jar desktop/build/libs/appleiislop.jar --no-disk
 ./gradlew :desktop:packageApp
 ./gradlew :desktop:packageDmg       # macOS only
