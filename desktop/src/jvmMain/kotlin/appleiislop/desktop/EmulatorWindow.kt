@@ -6,6 +6,7 @@ package appleiislop.desktop
 import appleiislop.apple2.Tape
 import appleiislop.apple2.Disk
 import appleiislop.apple2.KeyboardText
+import appleiislop.debugger.DebuggerWindow
 import java.awt.BorderLayout
 import java.awt.FileDialog
 import java.awt.Toolkit
@@ -46,6 +47,9 @@ class EmulatorWindow(roms: Roms, private val options: Options) : Emulator.Listen
     private val diskNames = arrayOfNulls<String>(2)
     private val writeProtectItems = Array(2) { JCheckBoxMenuItem("Write Protect") }
     @Volatile private var diskMotor = false
+    private val debuggerWindow by lazy {
+        DebuggerWindow(emulator.debugTarget, "AppleIIslop Debugger", configureFrame = AppIcon::install)
+    }
 
     fun show() {
         frame.defaultCloseOperation = WindowConstants.DISPOSE_ON_CLOSE
@@ -73,6 +77,7 @@ class EmulatorWindow(roms: Roms, private val options: Options) : Emulator.Listen
         options.tape?.let { if (insertTape(it)) emulator.playTape() }
         options.typeText?.let { emulator.type(it, delayFrames = BOOT_FRAMES) }
         emulator.post { it.video.monochrome = options.monochrome }
+        for (address in options.breakpoints) emulator.setBreakpoint(address, true)
         emulator.start()
     }
 
@@ -102,6 +107,17 @@ class EmulatorWindow(roms: Roms, private val options: Options) : Emulator.Listen
     override fun diskMotorChanged(on: Boolean) {
         diskMotor = on
         SwingUtilities.invokeLater { updateTitle() }
+    }
+
+    override fun pausedChanged(paused: Boolean) {
+        SwingUtilities.invokeLater {
+            pauseItem.isSelected = paused
+            updateTitle()
+        }
+    }
+
+    override fun debuggerStopped() {
+        SwingUtilities.invokeLater { debuggerWindow.show() }
     }
 
     override fun diskSaveFailed(drive: Int, file: File, error: IOException) {
@@ -183,6 +199,15 @@ class EmulatorWindow(roms: Roms, private val options: Options) : Emulator.Listen
                 toolTipText = "No disk interface: put disk2.rom in the ROM directory"
             }
             for (drive in 0..1) add(createDriveMenu(drive))
+        })
+        add(JMenu("Debug").apply {
+            add(item("Debugger...", shortcut(KeyEvent.VK_B)) { debuggerWindow.show() })
+            add(item("Break into Debugger", null) {
+                emulator.paused = true
+                pauseItem.isSelected = true
+                updateTitle()
+                debuggerWindow.show()
+            })
         })
         add(JMenu("View").apply {
             add(JCheckBoxMenuItem("Green Monitor", options.monochrome).apply {

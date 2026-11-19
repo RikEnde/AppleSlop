@@ -7,6 +7,7 @@ import appleiislop.apple2.Apple2Machine
 import appleiislop.apple2.Typist
 import appleiislop.apple2.Video
 import appleiislop.cpu.Disassembler
+import appleiislop.cpu.Debugger
 import java.awt.GraphicsEnvironment
 import java.awt.image.BufferedImage
 import java.io.File
@@ -30,6 +31,8 @@ const val USAGE = """Usage: appleIIslop [options]
                       A to B, as in --disassemble FA62-FA80; with --screenshot, the
                       picture comes from the same run
   --origin ADDR       Number the listing from hex ADDR, for code that is copied there to run
+  --break ADDR        Set a breakpoint at hex ADDR; repeat for more. A headless run ends
+                      at the first breakpoint or its frame limit
   --frames N          60ths of a second to run before the screenshot or listing (default: 120);
                       the run goes on while disk/tape playback or queued typing is active
   --tape FILE         Insert and play a PCM WAV cassette (use --no-disk for BASIC)
@@ -52,6 +55,7 @@ data class Options(
     val disassemble: IntRange? = null,
     /** Where the code in [disassemble] runs from, if it is copied there first; null for where it is. */
     val origin: Int? = null,
+    val breakpoints: List<Int> = emptyList(),
     val logKeys: Boolean = false,
     val sound: Boolean = true,
     val disks: List<File?> = listOf(null, null),
@@ -84,6 +88,8 @@ data class Options(
                     "--disassemble" -> options.copy(disassemble = parseRange(value()))
                     "--origin" -> options.copy(origin = address(value())
                         ?: throw IllegalArgumentException("--origin needs a hex address, as in 0800"))
+                    "--break" -> options.copy(breakpoints = options.breakpoints + (address(value())
+                        ?: throw IllegalArgumentException("--break needs a hex address, as in FDED")))
                     "--help", "-h" -> {
                         println(USAGE)
                         exitProcess(0)
@@ -194,13 +200,17 @@ fun isBundled(file: File): Boolean {
     return generateSequence(file.canonicalFile) { it.parentFile }.any { it == app }
 }
 
+/** The machine after [runHeadless], and the breakpoint it stopped at, if it did. */
+class HeadlessRun(val machine: Apple2Machine, val breakpoint: Int?)
+
 /**
  * Builds a machine and runs [Options.screenshotFrames] frames (60ths of a
  * second) as fast as possible, with the disks and text from [options]. It runs
  * on while a disk in drive 1 is turning, a tape plays, or text is being typed, for up to
- * [HEADLESS_LIMIT_FRAMES] more. Disk changes are not saved.
+ * [HEADLESS_LIMIT_FRAMES] more. Disk changes are not saved. With
+ * [Options.breakpoints], stops before executing the instruction at the first breakpoint reached.
  */
-fun runHeadless(roms: Roms, options: Options): Apple2Machine {
+fun runHeadless(roms: Roms, options: Options): HeadlessRun {
     val machine = roms.newMachine()
     machine.video.monochrome = options.monochrome
     for ((drive, file) in options.disks.withIndex()) {
@@ -209,6 +219,8 @@ fun runHeadless(roms: Roms, options: Options): Apple2Machine {
     options.tape?.let { machine.cassette.insert(TapeFile.load(it)); machine.cassette.play() }
     val typist = Typist()
     options.typeText?.let { typist.enqueue(it, delayFrames = BOOT_FRAMES) }
+    val debugger = Debugger(machine.bus::peek)
+    for (address in options.breakpoints) debugger.setBreakpoint(address)
     // With no disk in drive 1 the boot ROM turns the drive for ever, looking for one.
     fun loading() = machine.disk?.let { it.spinning && it.drives[0].disk != null } == true
     var frames = 0
@@ -216,10 +228,13 @@ fun runHeadless(roms: Roms, options: Options): Apple2Machine {
         ((typist.busy || loading() || machine.cassette.mode == appleiislop.apple2.Cassette.Mode.PLAYING) && frames < options.screenshotFrames + HEADLESS_LIMIT_FRAMES)
     ) {
         typist.onFrame(machine)
-        Emulator.runFrame(machine)
+        val finished = Emulator.runFrame(machine, Frame(machine.clock.ticks), {
+            debugger.active && debugger.shouldStop(machine.cpu)
+        })
+        if (!finished) return HeadlessRun(machine, machine.cpu.programCounter)
         frames++
     }
-    return machine
+    return HeadlessRun(machine, null)
 }
 
 /**
@@ -272,11 +287,18 @@ fun main(args: Array<String>) {
         exitProcess(2)
     }
     if (options.screenshot != null || options.disassemble != null) {
-        val machine = try {
+        val run = try {
             runHeadless(roms, options)
         } catch (e: IOException) {
             System.err.println("Couldn't load media: ${e.message}")
             exitProcess(1)
+        }
+        val machine = run.machine
+        if (options.breakpoints.isNotEmpty()) {
+            println(
+                if (run.breakpoint != null) "Breakpoint at %04X: %s".format(run.breakpoint, machine.cpu.state().summary)
+                else "No breakpoint reached before the run ended: ${machine.cpu.state().summary}",
+            )
         }
         options.disassemble?.let { println(disassemble(machine, it, options.origin ?: it.first)) }
         options.screenshot?.let {
